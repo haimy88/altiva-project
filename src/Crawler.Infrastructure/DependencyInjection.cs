@@ -1,5 +1,8 @@
+using Crawler.Domain.Jobs;
+using Crawler.Domain.Messages;
 using Crawler.Infrastructure.Health;
 using Crawler.Infrastructure.Messaging;
+using Crawler.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -18,6 +21,10 @@ public static class DependencyInjection
 
         services.Configure<RabbitMqOptions>(config.GetSection(RabbitMqOptions.SectionName));
         services.AddSingleton<RabbitMqConnectionProvider>();
+        services.AddHostedService<RabbitMqTopologyInitializer>();
+
+        services.AddSingleton<IJobRepository, JobRepository>();
+        services.AddSingleton<IJobQueue, RabbitMqJobQueue>();
 
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres")

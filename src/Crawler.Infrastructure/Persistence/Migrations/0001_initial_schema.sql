@@ -49,7 +49,6 @@ CREATE INDEX ix_pages_parent ON pages (parent_page_id);
 CREATE TABLE page_links (
     page_id      bigint  NOT NULL REFERENCES pages (id) ON DELETE CASCADE,
     target_url   text    NOT NULL,
-    is_internal  boolean NOT NULL,
 
     -- Idempotency: the same link on the same page is stored once.
     PRIMARY KEY (page_id, target_url)

@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Crawler.Api.Jobs;
+using Crawler.Api.Observability;
 using Crawler.Infrastructure;
 using Crawler.Infrastructure.Health;
 using Crawler.Infrastructure.Persistence;
@@ -5,6 +8,15 @@ using Crawler.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddProblemDetails(); // consistent JSON error bodies (RFC 7807), incl. unhandled exceptions
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter())); // enums as "Pending", not 0
+
+// The React dev server runs on another origin.
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+    .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .WithExposedHeaders(CorrelationId.Header, "Location")));
 
 var app = builder.Build();
 
@@ -16,7 +28,13 @@ if (args.Contains("--migrate"))
     return ok ? 0 : 1;
 }
 
+app.UseCorrelationId(); // first, so even unhandled-exception logs and 500 responses carry it
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+app.UseCors();
+
 app.MapCrawlerHealthEndpoints();
+app.MapJobEndpoints();
 
 app.Logger.LogInformation("Crawler.Api started");
 app.Run();

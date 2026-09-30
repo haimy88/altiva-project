@@ -54,6 +54,14 @@ public class UrlNormalizerTests
         Assert.Null(UrlNormalizer.Normalize(href, Page));
 
     [Fact]
+    public void Ignores_urls_longer_than_the_limit()
+    {
+        var tooLong = "/" + new string('a', UrlNormalizer.MaxUrlLength);
+        Assert.Null(UrlNormalizer.Normalize(tooLong, Page));
+        Assert.Null(UrlNormalizer.NormalizeStartUrl("https://site.com" + tooLong));
+    }
+
+    [Fact]
     public void NormalizeAll_removes_duplicates_that_differ_only_in_form()
     {
         var hrefs = new[] { "/about", "/about#team", "https://SITE.com/about", "mailto:x@y.z", "/contact" };

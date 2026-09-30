@@ -35,7 +35,7 @@ services:
     build: { context: ., args: { PROJECT: Crawler.Api } }
     command: ["--migrate"]
     environment: &app-env
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=crawler;Username=crawler;Password=crawler
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=crawler;Username=crawler;Password=crawler;GSS Encryption Mode=Disable
       RabbitMq__Host: rabbitmq
       RabbitMq__User: crawler
       RabbitMq__Password: crawler

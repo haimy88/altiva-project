@@ -1,0 +1,42 @@
+# Manual API checks. Open in VS Code with the REST Client extension (humao.rest-client)
+# and click "Send Request" above each block. Requires `docker compose up`.
+
+@api = http://localhost:5080
+@jobId = {{create.response.body.$.jobId}}
+
+### Health (API): Postgres + RabbitMQ status
+GET {{api}}/health
+
+### Health (Worker)
+GET http://localhost:5081/health
+
+### Create a job → 202 + { jobId }. Run this first; later requests reuse its jobId.
+# @name create
+POST {{api}}/api/jobs
+Content-Type: application/json
+
+{ "url": "https://example.com", "maxDepth": 2 }
+
+### Job status + progress
+GET {{api}}/api/jobs/{{jobId}}
+
+### Result tree (root is null until the worker has crawled something)
+GET {{api}}/api/jobs/{{jobId}}/tree
+
+### History, newest first
+GET {{api}}/api/jobs?page=1&pageSize=5
+
+### Cancel → 202 the first time, 409 after that
+POST {{api}}/api/jobs/{{jobId}}/cancel
+
+### Validation → 400 with per-field errors
+POST {{api}}/api/jobs
+Content-Type: application/json
+
+{ "url": "example.com", "maxDepth": 9 }
+
+### Unknown job → 404
+GET {{api}}/api/jobs/00000000-0000-0000-0000-000000000000
+
+### Bad paging → 400
+GET {{api}}/api/jobs?page=0&pageSize=500

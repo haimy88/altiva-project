@@ -6,6 +6,9 @@ namespace Crawler.Domain.Links;
 /// </summary>
 public static class UrlNormalizer
 {
+    /// <summary>Longer URLs are ignored: browsers/servers commonly cap around here, and it keeps DB index entries small.</summary>
+    public const int MaxUrlLength = 2048;
+
     /// <summary>
     /// Resolves <paramref name="href"/> against the page it was found on.
     /// Returns null for anything that isn't a crawlable http(s) link:
@@ -20,6 +23,7 @@ public static class UrlNormalizer
 
         if (!Uri.TryCreate(pageUrl, trimmed, out var resolved)) return null;
         if (resolved.Scheme != Uri.UriSchemeHttp && resolved.Scheme != Uri.UriSchemeHttps) return null;
+        if (resolved.AbsoluteUri.Length > MaxUrlLength) return null;
 
         // Uri already lowercases scheme/host, drops default ports and resolves "../".
         // We additionally drop the fragment: /about#team and /about are the same page.
