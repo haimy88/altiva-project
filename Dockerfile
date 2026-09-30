@@ -21,4 +21,5 @@ WORKDIR /app
 COPY --from=build /app .
 USER app
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "exec dotnet $APP_DLL"]
+# "$@" forwards compose `command:` args (e.g. --migrate) to the app
+ENTRYPOINT ["sh", "-c", "exec dotnet $APP_DLL \"$@\"", "--"]

@@ -29,19 +29,32 @@ services:
       timeout: 5s
       retries: 20
 
-  api:
+  # One-shot: applies SQL migrations, then exits. api + worker start only after it succeeds.
+  migrate:
+    image: crawler-api
     build: { context: ., args: { PROJECT: Crawler.Api } }
+    command: ["--migrate"]
     environment: &app-env
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=crawler;Username=crawler;Password=crawler
       RabbitMq__Host: rabbitmq
       RabbitMq__User: crawler
       RabbitMq__Password: crawler
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: crawler-api
+    build: { context: ., args: { PROJECT: Crawler.Api } }
+    environment: *app-env
     ports: ["5080:8080"]
     depends_on: &app-deps
       postgres: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
 
   worker:
+    image: crawler-worker
     build: { context: ., args: { PROJECT: Crawler.Worker } }
     environment: *app-env
     ports: ["5081:8080"]
