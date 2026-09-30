@@ -1,3 +1,4 @@
+using Crawler.Domain.Crawling;
 using Crawler.Domain.Jobs;
 using Crawler.Domain.Messages;
 using Crawler.Infrastructure.Health;
@@ -25,6 +26,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IJobRepository, JobRepository>();
         services.AddSingleton<IJobQueue, RabbitMqJobQueue>();
+        services.AddSingleton<ICrawlRepository, CrawlRepository>();
 
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres")

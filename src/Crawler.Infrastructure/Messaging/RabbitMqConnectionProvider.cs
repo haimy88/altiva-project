@@ -5,7 +5,9 @@ namespace Crawler.Infrastructure.Messaging;
 
 /// <summary>
 /// One long-lived RabbitMQ connection per process (connections are expensive; channels are cheap).
-/// Created lazily and recreated if it has been closed.
+/// Created lazily on first use. After that it is never replaced: if the network drops, the client's
+/// automatic recovery reconnects it and restores its channels and consumers. Replacing it ourselves
+/// would throw those away.
 /// </summary>
 public sealed class RabbitMqConnectionProvider : IAsyncDisposable
 {
@@ -26,17 +28,18 @@ public sealed class RabbitMqConnectionProvider : IAsyncDisposable
         };
     }
 
+    /// <summary>True if the connection exists and is currently open (false while it is recovering).</summary>
+    public bool IsOpen => _connection?.IsOpen == true;
+
     public async Task<IConnection> GetConnectionAsync(CancellationToken ct = default)
     {
-        if (_connection is { IsOpen: true }) return _connection;
+        if (_connection is not null) return _connection;
 
         await _lock.WaitAsync(ct);
         try
         {
-            if (_connection is { IsOpen: true }) return _connection;
-            if (_connection is not null) await _connection.DisposeAsync();
-            _connection = await _factory.CreateConnectionAsync(ct);
-            return _connection;
+            // First connect: if RabbitMQ is down this throws and the next call tries again.
+            return _connection ??= await _factory.CreateConnectionAsync(ct);
         }
         finally
         {

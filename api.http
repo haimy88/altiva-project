@@ -11,11 +11,13 @@ GET {{api}}/health
 GET http://localhost:5081/health
 
 ### Create a job → 202 + { jobId }. Run this first; later requests reuse its jobId.
+# quotes.toscrape.com is a crawler-friendly sandbox with many internal links (~50 pages at depth 1, ~150 at depth 2).
+# Try "https://example.com" for a one-page site whose only link is external (ratio 0, no children).
 # @name create
 POST {{api}}/api/jobs
 Content-Type: application/json
 
-{ "url": "https://example.com", "maxDepth": 2 }
+{ "url": "https://quotes.toscrape.com/", "maxDepth": 1 }
 
 ### Job status + progress
 GET {{api}}/api/jobs/{{jobId}}

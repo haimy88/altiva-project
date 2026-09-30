@@ -9,10 +9,10 @@ public sealed class RabbitMqHealthCheck(RabbitMqConnectionProvider connections) 
     {
         try
         {
-            var connection = await connections.GetConnectionAsync(ct);
-            return connection.IsOpen
+            await connections.GetConnectionAsync(ct); // connects on first use
+            return connections.IsOpen
                 ? HealthCheckResult.Healthy()
-                : HealthCheckResult.Unhealthy("RabbitMQ connection is closed");
+                : HealthCheckResult.Unhealthy("RabbitMQ connection is down (reconnecting)");
         }
         catch (Exception ex)
         {
