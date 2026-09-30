@@ -42,3 +42,28 @@ GET {{api}}/api/jobs/00000000-0000-0000-0000-000000000000
 
 ### Bad paging → 400
 GET {{api}}/api/jobs?page=0&pageSize=500
+
+
+### ===== Event-driven checks (publish straight to RabbitMQ via its management API) =====
+@rabbit = http://localhost:15672/api
+@rabbitAuth = Basic crawler:crawler
+
+### Duplicate delivery: publish a SECOND copy of the job message for {{jobId}} (run "Create a job" first).
+# Expect: worker logs "Job is already Completed; skipping" (or resumes if still running), no duplicate rows.
+POST {{rabbit}}/exchanges/%2F/crawl/publish
+Authorization: {{rabbitAuth}}
+Content-Type: application/json
+
+{ "routing_key": "crawl.job", "properties": { "delivery_mode": 2 }, "payload_encoding": "string",
+  "payload": "{\"messageId\":\"{{$guid}}\",\"jobId\":\"{{jobId}}\",\"correlationId\":\"manual-duplicate\",\"requestedAt\":\"{{$datetime iso8601}}\"}" }
+
+### Poison message: garbage that can never be processed → lands in crawl.jobs.dead
+POST {{rabbit}}/exchanges/%2F/crawl/publish
+Authorization: {{rabbitAuth}}
+Content-Type: application/json
+
+{ "routing_key": "crawl.job", "properties": { "delivery_mode": 2 }, "payload_encoding": "string", "payload": "this is not a job" }
+
+### Queue counts (crawl.jobs / crawl.jobs.retry / crawl.jobs.dead)
+GET {{rabbit}}/queues/%2F?columns=name,messages
+Authorization: {{rabbitAuth}}

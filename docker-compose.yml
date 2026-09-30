@@ -56,7 +56,10 @@ services:
   worker:
     image: crawler-worker
     build: { context: ., args: { PROJECT: Crawler.Worker } }
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Message retry attempts for transient failures (override: WORKER_MAX_ATTEMPTS=2 docker compose up -d worker)
+      Messaging__Retry__MaxAttempts: ${WORKER_MAX_ATTEMPTS:-5}
     ports: ["5081:8080"]
     depends_on: *app-deps
 

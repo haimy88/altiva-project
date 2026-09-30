@@ -22,11 +22,22 @@ public static class RabbitMqTopology
     public const string RetryQueue = "crawl.jobs.retry";
     public const int RetryDelayMs = 10_000;
 
+    /// <summary>Header carrying how many times this job message has been tried (set by the worker on retry).</summary>
+    public const string AttemptHeader = "crawl-attempt";
+    /// <summary>Headers added when a message is dead-lettered by the worker, for whoever inspects the DLQ.</summary>
+    public const string ErrorHeader = "crawl-error";
+    public const string ErrorTypeHeader = "crawl-error-type";
+    public const string FailedAtHeader = "crawl-failed-at";
+
     public const string DeadLetterExchange = "crawl.dlx";
     public const string DeadLetterQueue = "crawl.jobs.dead";
     public const string DeadLetterRoutingKey = "crawl.job.dead";
 
-    /// <summary>Safety net: a message redelivered this many times (e.g. worker keeps crashing on it) goes to the DLQ.</summary>
+    /// <summary>
+    /// Safety net for crash loops: if the worker *process* dies while holding a message this many times
+    /// (the broker counts deliveries to consumers that disappeared), RabbitMQ dead-letters it by itself.
+    /// Normal failures are handled by the worker's own attempt counting (MessageFailurePolicy).
+    /// </summary>
     public const int DeliveryLimit = 5;
 
     public static async Task DeclareAsync(IChannel channel, CancellationToken ct = default)
@@ -53,6 +64,9 @@ public static class RabbitMqTopology
                 ["x-message-ttl"] = RetryDelayMs,
                 ["x-dead-letter-exchange"] = Exchange,
                 ["x-dead-letter-routing-key"] = JobsRoutingKey,
+                // Don't lose a message on the retry → work-queue hop if the broker restarts mid-move.
+                ["x-dead-letter-strategy"] = "at-least-once",
+                ["x-overflow"] = "reject-publish",
             }, cancellationToken: ct);
 
         // Dead-letter queue: poison messages park here for inspection.

@@ -55,8 +55,9 @@ public sealed class CrawlRepository(NpgsqlDataSource db) : ICrawlRepository
         await using var conn = await db.OpenConnectionAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
-        // 1. The page itself. "AND status = 'Pending'" makes a replay a no-op.
-        await ExecuteAsync(conn, tx, """
+        // 1. The page itself. "AND status = 'Pending'" makes a replay a no-op. If another copy of this job already
+        //    finished the page (duplicate delivery running concurrently), stop: its links/children are already saved.
+        var updated = await ExecuteAsync(conn, tx, """
             UPDATE pages SET status = 'Crawled', http_status = @httpStatus, domain_link_ratio = @ratio,
                              error = NULL, crawled_at = now()
             WHERE id = @pageId AND status = 'Pending'
@@ -64,6 +65,11 @@ public sealed class CrawlRepository(NpgsqlDataSource db) : ICrawlRepository
             ("pageId", page.PageId, NpgsqlDbType.Bigint),
             ("httpStatus", page.HttpStatus, NpgsqlDbType.Integer),
             ("ratio", page.DomainLinkRatio, NpgsqlDbType.Double));
+        if (updated == 0)
+        {
+            await tx.RollbackAsync(ct);
+            return;
+        }
 
         // 2. Edges: every outgoing link. Duplicates (replays) are ignored by the primary key.
         await ExecuteAsync(conn, tx, """
@@ -140,13 +146,13 @@ public sealed class CrawlRepository(NpgsqlDataSource db) : ICrawlRepository
     }
 
     // Raw Npgsql for array parameters (Dapper would expand arrays into "(@p1, @p2, ...)" lists).
-    private static async Task ExecuteAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string sql, CancellationToken ct,
+    private static async Task<int> ExecuteAsync(NpgsqlConnection conn, NpgsqlTransaction tx, string sql, CancellationToken ct,
         params (string Name, object Value, NpgsqlDbType Type)[] parameters)
     {
         await using var cmd = new NpgsqlCommand(sql, conn, tx);
         foreach (var (name, value, type) in parameters)
             cmd.Parameters.Add(new NpgsqlParameter(name, type) { Value = value });
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static string? Truncate(string? s, int max) => s is null || s.Length <= max ? s : s[..max];

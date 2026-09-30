@@ -22,6 +22,7 @@ public static class DependencyInjection
 
         services.Configure<RabbitMqOptions>(config.GetSection(RabbitMqOptions.SectionName));
         services.AddSingleton<RabbitMqConnectionProvider>();
+        services.AddSingleton<RabbitMqPublisher>();
         services.AddHostedService<RabbitMqTopologyInitializer>();
 
         services.AddSingleton<IJobRepository, JobRepository>();

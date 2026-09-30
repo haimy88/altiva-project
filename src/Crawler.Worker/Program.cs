@@ -1,5 +1,6 @@
 using Crawler.Infrastructure;
 using Crawler.Infrastructure.Health;
+using Crawler.Infrastructure.Messaging;
 using Crawler.Worker.Crawling;
 using Crawler.Worker.Messaging;
 using Microsoft.Extensions.Http.Resilience;
@@ -32,6 +33,11 @@ builder.Services.AddHttpClient<IPageFetcher, HttpPageFetcher>(http =>
     })
     // Separate retry/circuit-breaker state per host: one flaky site must not trip fetches for every other job.
     .SelectPipelineByAuthority();
+
+builder.Services.AddOptions<MessageRetryOptions>()
+    .Bind(builder.Configuration.GetSection(MessageRetryOptions.SectionName))
+    .Validate(o => o.MaxAttempts is >= 1 and <= 50, "Messaging:Retry:MaxAttempts must be between 1 and 50")
+    .ValidateOnStart();
 
 builder.Services.AddTransient<CrawlJobProcessor>();
 builder.Services.AddHostedService<CrawlJobConsumer>();

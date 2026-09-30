@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Crawler.Domain.Jobs;
 using Crawler.Domain.Messages;
 using Crawler.Infrastructure.Messaging;
 using Crawler.Worker.Crawling;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -13,6 +15,9 @@ namespace Crawler.Worker.Messaging;
 /// </summary>
 public sealed class CrawlJobConsumer(
     RabbitMqConnectionProvider connections,
+    RabbitMqPublisher publisher,
+    IJobRepository jobs,
+    IOptions<MessageRetryOptions> retryOptions,
     IServiceScopeFactory scopes,
     ILogger<CrawlJobConsumer> logger) : BackgroundService
 {
@@ -89,12 +94,93 @@ public sealed class CrawlJobConsumer(
         }
         catch (Exception ex)
         {
-            // TODO step 6: delayed retries for transient errors + counted attempts → DLQ.
-            // (Plain requeue does NOT advance x-delivery-limit on RabbitMQ 4, so this can loop; don't rely on it.)
-            logger.LogError(ex, "Job processing failed; requeueing");
-            await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true);
+            await HandleFailureAsync(channel, delivery, message, ex, stoppingToken);
         }
     }
+
+    /// <summary>
+    /// Transient failure → copy to the retry queue (waits 10s, then returns to crawl.jobs) with attempt+1.
+    /// Permanent failure, or out of attempts → copy to the dead-letter queue with the error, and mark the job Failed.
+    /// The original is acked only after the copy is confirmed, so the message is never lost (worst case: duplicated,
+    /// which the idempotent crawl tolerates). We don't use nack+requeue: on RabbitMQ 4 that neither delays nor counts.
+    /// </summary>
+    private async Task HandleFailureAsync(IChannel channel, BasicDeliverEventArgs delivery, CrawlJobRequested message,
+        Exception ex, CancellationToken stoppingToken)
+    {
+        var attempt = GetAttempt(delivery.BasicProperties);
+        var maxAttempts = retryOptions.Value.MaxAttempts;
+        var action = MessageFailurePolicy.Decide(ex, attempt, maxAttempts);
+
+        try
+        {
+            // Keep our own headers; drop the broker's bookkeeping (x-death, x-delivery-count, ...) so it doesn't pile up.
+            var props = new BasicProperties(delivery.BasicProperties)
+            {
+                Headers = (delivery.BasicProperties.Headers ?? new Dictionary<string, object?>())
+                    .Where(h => !h.Key.StartsWith("x-", StringComparison.Ordinal))
+                    .ToDictionary(h => h.Key, h => h.Value),
+            };
+
+            if (action == FailureAction.Retry)
+            {
+                logger.LogWarning(ex, "Transient failure on attempt {Attempt}/{Max}; retrying in {Delay}s",
+                    attempt, maxAttempts, RabbitMqTopology.RetryDelayMs / 1000);
+                props.Headers[RabbitMqTopology.AttemptHeader] = attempt + 1;
+                // Default exchange ("") routes straight to the queue named by the routing key.
+                await publisher.PublishAsync("", RabbitMqTopology.RetryQueue, props, delivery.Body, stoppingToken);
+            }
+            else
+            {
+                logger.LogError(ex, "Giving up on attempt {Attempt} ({Kind}); sending to dead-letter queue",
+                    attempt, MessageFailurePolicy.IsTransient(ex) ? "out of retries" : "non-transient error");
+                props.Headers[RabbitMqTopology.AttemptHeader] = attempt;
+                props.Headers[RabbitMqTopology.ErrorHeader] = Truncate(ex.Message, 500);
+                props.Headers[RabbitMqTopology.ErrorTypeHeader] = ex.GetType().FullName;
+                props.Headers[RabbitMqTopology.FailedAtHeader] = DateTimeOffset.UtcNow.ToString("O");
+                await publisher.PublishAsync(RabbitMqTopology.DeadLetterExchange, RabbitMqTopology.DeadLetterRoutingKey,
+                    props, delivery.Body, stoppingToken);
+                await TryMarkJobFailedAsync(message.JobId, $"Gave up after {attempt} attempt(s): {ex.Message}");
+            }
+
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
+        }
+        catch (Exception publishError)
+        {
+            // Couldn't park the message (broker trouble too): pause briefly, then put it back as-is.
+            // (The pause avoids a tight redelivery loop, since requeue has no built-in delay.)
+            logger.LogError(publishError, "Could not route failed message; requeueing it as-is");
+            try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); } catch (OperationCanceledException) { }
+            try { await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true); }
+            catch (Exception nackError) { logger.LogWarning(nackError, "Nack failed; the broker will redeliver when the channel closes"); }
+        }
+    }
+
+    /// <summary>Best effort: if the DB is what's down, the job stays Running; replaying it from the DLQ later resumes it.</summary>
+    private async Task TryMarkJobFailedAsync(Guid jobId, string reason)
+    {
+        try { await jobs.MarkFailedAsync(jobId, Truncate(reason, 1000), CancellationToken.None); }
+        catch (Exception ex) { logger.LogWarning(ex, "Could not mark job Failed"); }
+    }
+
+    /// <summary>
+    /// 1 for a first delivery; the worker sets the header when it schedules a retry. Parsed defensively:
+    /// a message published by hand (e.g. from the RabbitMQ UI) can carry it as a string (byte[]), or garbage.
+    /// </summary>
+    public static int GetAttempt(IReadOnlyBasicProperties props)
+    {
+        if (props.Headers?.TryGetValue(RabbitMqTopology.AttemptHeader, out var value) != true) return 1;
+        var attempt = value switch
+        {
+            int i => i,
+            long l => (int)Math.Clamp(l, 1, int.MaxValue),
+            byte[] bytes when int.TryParse(System.Text.Encoding.UTF8.GetString(bytes), out var parsed) => parsed,
+            string s when int.TryParse(s, out var parsed) => parsed,
+            _ => 1,
+        };
+        return Math.Max(1, attempt);
+    }
+
+    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
     private static CrawlJobRequested? TryDeserialize(ReadOnlySpan<byte> body)
     {
