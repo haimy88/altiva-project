@@ -1,4 +1,4 @@
-# Local stack: Postgres + RabbitMQ + Crawl API (Service A) + Crawl Worker (Service B).
+# Local stack: Postgres + RabbitMQ + Crawl API (Service A) + Crawl Worker (Service B) + React UI.
 # Dev-only credentials (crawler/crawler) — not for production.
 services:
   postgres:
@@ -62,6 +62,13 @@ services:
       Messaging__Retry__MaxAttempts: ${WORKER_MAX_ATTEMPTS:-5}
     ports: ["5081:8080"]
     depends_on: *app-deps
+
+  # React UI served by nginx, which also proxies /api → api. Open http://localhost:8080
+  web:
+    image: crawler-web
+    build: { context: ./web }
+    ports: ["8080:80"]
+    depends_on: [api]
 
 volumes:
   pgdata:
