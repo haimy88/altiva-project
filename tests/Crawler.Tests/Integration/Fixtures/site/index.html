@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><title>Fixture home</title></head>
+<body>
+  <!-- Shared nav/footer on every page, like a real site: repeated links must not create duplicates. -->
+  <nav><a href="/">Home</a> | <a href="/about.html">About</a> | <a href="/blog/">Blog</a></nav>
+  <a href="about.html">About</a>
+  <a href="about.html#team">About again (same page, different fragment)</a>
+  <a href="/blog/">Blog</a>
+  <a href="#top">Back to top (in-page anchor, ignored)</a>
+  <a href="mailto:hi@example.com">Mail (ignored)</a>
+  <a href="javascript:void(0)">JS (ignored)</a>
+  <a href="https://external.example/">External</a>
+  <a href="/missing.html">Broken link (404)</a>
+  <a href="/data.json">Not HTML</a>
+  <footer><a href="https://external.example/">Partner site</a> · <a href="mailto:hi@example.com">Contact</a></footer>
+</body></html>
