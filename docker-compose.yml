@@ -1,0 +1,51 @@
+# Local stack: Postgres + RabbitMQ + Crawl API (Service A) + Crawl Worker (Service B).
+# Dev-only credentials (crawler/crawler) — not for production.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crawler
+      POSTGRES_USER: crawler
+      POSTGRES_PASSWORD: crawler
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crawler -d crawler"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: crawler
+      RABBITMQ_DEFAULT_PASS: crawler
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: { context: ., args: { PROJECT: Crawler.Api } }
+    environment: &app-env
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=crawler;Username=crawler;Password=crawler
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: crawler
+      RabbitMq__Password: crawler
+    ports: ["5080:8080"]
+    depends_on: &app-deps
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  worker:
+    build: { context: ., args: { PROJECT: Crawler.Worker } }
+    environment: *app-env
+    ports: ["5081:8080"]
+    depends_on: *app-deps
+
+volumes:
+  pgdata:
