@@ -99,14 +99,19 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 .progress-fill { height: 100%; background: var(--accent); transition: width 0.4s ease; }
 
 /* Tree */
-.tree-actions { display: flex; gap: 1rem; margin-bottom: 0.5rem; }
-.tree-list { list-style: none; margin: 0; padding-left: 1.4rem; border-left: 1px dashed var(--border); }
-.tree-list.tree-root { padding-left: 0; border-left: none; }
-.tree-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.2rem 0; flex-wrap: wrap; }
+.tree-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+.tree-list { list-style: none; margin: 0; padding: 0; }
+/* Table-like rows so status, ratio and links line up under the header. */
+.tree-row { display: grid; grid-template-columns: minmax(0, 1fr) 6rem 10rem 4rem; align-items: center; gap: 0.75rem; padding: 0.25rem 0.25rem; border-bottom: 1px solid var(--border); }
 .tree-row:hover { background: var(--bg); }
+.tree-header { color: var(--muted); font-size: 0.8rem; font-weight: 500; border-bottom-width: 2px; cursor: default; }
+.tree-header:hover { background: none; }
+.tree-page { display: flex; align-items: center; min-width: 0; }
+.tree-page a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.child-count { margin-left: 0.5rem; font-size: 0.78rem; white-space: nowrap; }
 .toggle { display: inline-block; flex-shrink: 0; width: 1.4rem; padding: 0; border: none; background: none; color: var(--muted); }
 .tree-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88rem; }
-.tree-error { color: var(--red); font-size: 0.85rem; }
+.tree-error { grid-column: span 2; color: var(--red); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ratio { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--muted); }
 .ratio-track { width: 60px; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
 .ratio-fill { display: block; height: 100%; background: var(--green); }
@@ -123,3 +128,5 @@ th, td { text-align: left; padding: 0.55rem 0.5rem; border-bottom: 1px solid var
 th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
 .url-cell { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; }
+
+.tree-error.muted { color: var(--muted); }

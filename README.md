@@ -55,6 +55,9 @@ Worked on the project throughout the day, between breaks and research.
 - **Message Broker**
   - RabbitMQ passes messages between services
 - **UI:** React with Vite
+  - Polling is chosen to provide updates for progress bar
+  - Tree updates every 4s
+  - Status updates every 1.5s
 
 ## Assumptions
 - The same URL submitted twice should produce two separate jobs since each is a snapshot and the site may have changed
@@ -131,6 +134,7 @@ Intentionally kept thin since the DB is the source of truth.
 - URL that redirects to another host is not processed
   - E.g., http://google.com will not be processed because it redirects to http://www.google.com
   - Brief defines domain as the exact host of the start URL, so technically the "www" is discriminating
+- Requires the "https" or "http" prefix which may confuse users at first
 
 ## Next Steps with more time
 - Try to go over the code more carefully and see if any other variable should be configurable in settings
@@ -140,3 +144,4 @@ Intentionally kept thin since the DB is the source of truth.
 - Consuming job messages has a fixed 10s retry, it's better if the time grows exponentially
 - Stale job sweeper to deal with jobs that are stuck in running limbo
 - Add OpenTelemetry for much more granular performance measuring
+- Test many more edge cases and real scenarios, such as real large sites and slow servers
